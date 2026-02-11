@@ -1,0 +1,107 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Garden Sun Map</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://unpkg.com/suncalc@1.9.0/suncalc.js"></script>
+    <style>
+        body { margin: 0; overflow: hidden; font-family: sans-serif; background: #1a1a1a; }
+        #ui { position: absolute; bottom: 20px; left: 5%; width: 90%; background: rgba(255,255,255,0.9); 
+              padding: 15px; border-radius: 15px; box-sizing: border-box; box-shadow: 0 4px 15px rgba(0,0,0,0.3); }
+        input[type=range] { width: 100%; height: 25px; margin: 10px 0; }
+        label { font-size: 14px; font-weight: bold; color: #333; }
+        .data { font-size: 12px; color: #666; margin-bottom: 5px; }
+    </style>
+</head>
+<body>
+    <div id="ui">
+        <div class="data" id="sun-info">Finding location...</div>
+        <label>Time of Day</label>
+        <input type="range" id="timeSlider" min="0" max="1439" value="720">
+        <label>Season (Day of Year)</label>
+        <input type="range" id="daySlider" min="0" max="364" value="172">
+    </div>
+
+    <script>
+        // 1. Setup Scene
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x87ceeb);
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        renderer.setPixelRatio(window.devicePixelRatio);
+        document.body.appendChild(renderer.domElement);
+
+        // 2. Add Yard (The Ground)
+        const ground = new THREE.Mesh(
+            new THREE.PlaneGeometry(20, 20),
+            new THREE.MeshStandardMaterial({ color: 0x44aa44 })
+        );
+        ground.rotation.x = -Math.PI / 2;
+        ground.receiveShadow = true;
+        scene.add(ground);
+
+        // 3. Add a "Fence" or Tree (To see shadows)
+        const box = new THREE.Mesh(
+            new THREE.BoxGeometry(1, 4, 0.2),
+            new THREE.MeshStandardMaterial({ color: 0x8b4513 })
+        );
+        box.position.set(0, 2, -5);
+        box.castShadow = true;
+        scene.add(box);
+
+        // 4. Lighting (The Sun)
+        const sunLight = new THREE.DirectionalLight(0xffffff, 1);
+        sunLight.castShadow = true;
+        sunLight.shadow.mapSize.width = 1024;
+        sunLight.shadow.mapSize.height = 1024;
+        scene.add(sunLight);
+        scene.add(new THREE.AmbientLight(0x404040, 0.5));
+
+        camera.position.set(10, 10, 10);
+        camera.lookAt(0, 0, 0);
+
+        // 5. Sun Movement Logic
+        let lat = 34.05, lng = -118.24; // Default to LA
+        navigator.geolocation.getCurrentPosition(p => {
+            lat = p.coords.latitude; lng = p.coords.longitude;
+        });
+
+        function updateSun() {
+            const dayOfYear = parseInt(document.getElementById('daySlider').value);
+            const minutes = parseInt(document.getElementById('timeSlider').value);
+            
+            const date = new Date(new Date().getFullYear(), 0, 1);
+            date.setDate(date.getDate() + dayOfYear);
+            date.setHours(Math.floor(minutes / 60), minutes % 60);
+
+            const sunPos = SunCalc.getPosition(date, lat, lng);
+            
+            // Map SunCalc to 3D Space
+            const dist = 50;
+            sunLight.position.x = dist * Math.sin(sunPos.azimuth) * Math.cos(sunPos.altitude);
+            sunLight.position.y = dist * Math.sin(sunPos.altitude);
+            sunLight.position.z = dist * Math.cos(sunPos.azimuth) * Math.cos(sunPos.altitude);
+
+            document.getElementById('sun-info').innerText = `Date: ${date.toLocaleDateString()} | Time: ${date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`;
+            
+            // Change sky color based on altitude
+            if(sunPos.altitude < 0) scene.background.setHex(0x00000c);
+            else scene.background.setHex(0x87ceeb);
+        }
+
+        document.getElementById('timeSlider').addEventListener('input', updateSun);
+        document.getElementById('daySlider').addEventListener('input', updateSun);
+
+        function animate() {
+            requestAnimationFrame(animate);
+            renderer.render(scene, camera);
+        }
+        animate();
+        updateSun();
+    </script>
+</body>
+</html>
